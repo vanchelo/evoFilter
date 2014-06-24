@@ -4,7 +4,7 @@ require MODX_BASE_PATH . 'assets/libs/helpers.php';
 require MODX_BASE_PATH . 'assets/libs/php_fast_cache.php';
 require MODX_BASE_PATH . 'assets/libs/container.class.php';
 
-class Filter
+class EvoFilter
 {
     const CONTENT_TABLE = 'site_content';
     const TV_TABLE = 'site_tmplvars';
@@ -67,12 +67,13 @@ class Filter
         $this->modx =& $modx;
 
         $this->config = array(
-            'form_tpl'  => 'new_filter_form',
-            'tpl'       => 'DLpost',
-            'parent'    => 10,
-            'only_form' => false,
-            'display'   => 14,
-            'prefix'    => 'ef',
+            'form_tpl'       => 'new_filter_form', // Чанк шаблон формы поиска
+            'tpl'            => 'DLpost', // Чанк шаблон для DocLister
+            'parent'         => 10,
+            'only_form'      => false, // Показываем только форму без результатов
+            'display'        => 14, // Кол-во результатов на странице
+            'prefix'         => 'ef', // Префикс для TV параметров
+            'request_prefix' => 'ef', // Префикс для TV параметров в запросе
         );
 
         if (!empty($config['form_tpl'])) $this->config['form_tpl'] = $config['form_tpl'];
@@ -81,6 +82,7 @@ class Filter
         if (!empty($config['only_form'])) $this->config['only_form'] = true;
         if (!empty($config['display'])) $this->config['display'] = (int) $config['display'];
         if (!empty($config['prefix'])) $this->config['prefix'] = $config['prefix'];
+        if (!empty($config['request_prefix'])) $this->config['request_prefix'] = $config['request_prefix'];
 
         $this->parent = (int) $this->config['parent'];
 
@@ -106,10 +108,10 @@ class Filter
      * Генерация формы поиска и результатов
      * Данные помещаются в соответствующие плейсхолдеры
      *
-     * [+prefix.form+]        - Форма поиска
-     * [+prefix.result+]      - Результат работы DocLister
-     * [+prefix.items_count+] - Общее кол-во ресурсов
-     * [+prefix.form+]        - Кол-во найденных (отфильтрованных) ресурсов
+     * [+prefix.form+]        : Форма поиска
+     * [+prefix.result+]      : Результат работы DocLister
+     * [+prefix.items_count+] : Общее кол-во ресурсов
+     * [+prefix.form+]        : Кол-во найденных (отфильтрованных) ресурсов
      */
     public function process()
     {
@@ -168,9 +170,9 @@ class Filter
             {
                 $output = !empty($request->{$id}) ? 'checked' : '';
             }
-            elseif ($tv['type'] == 'num')
+            elseif ($tv['type'] == 'num' && (int) $request->{$id})
             {
-                $output = (int) $request->{$id} ? (int) $request->{$id} : '';
+                $output = (int) $request->{$id};
             }
 
             $params["tv:{$tv['key']}"] = $output;
@@ -439,12 +441,6 @@ class Filter
         {
             $tv = $this->getTVId($tv);
             $sql .= $i ? ' or ' : ' and ';
-            /*// Чекбокс
-            if ($value == 'checked') $sql .= "(tmplvarid = {$tv} and value != '')";
-            // Цена
-            elseif ($tv == 8)
-            // Остальные
-            else $sql .= "(tmplvarid = {$tv} and value = '{$value}')";*/
 
             switch ($tvs[$tv]['type']) {
                 case 'checkbox':
@@ -482,13 +478,21 @@ class Filter
         return $ids;
     }
 
-    protected function getRequest($prefix = 'i')
+    /**
+     * Подготовка и обработка запроса
+     *
+     * @param string $prefix По умолчанию 'ef'
+     * @return Container
+     */
+    protected function getRequest($prefix = null)
     {
         if ($this->request) return $this->request;
 
         $request = $_REQUEST;
 
-        // Обходим массив с запросом
+        if ($prefix === null) $prefix = $this->config['request_prefix'];
+
+        // Обходим массив запроса
         foreach ($request as $tv => $value)
         {
             if (strpos($tv, $prefix) !== 0) continue;
@@ -515,9 +519,17 @@ class Filter
         return $this->id . '_' . md5(implode(',', $this->getRequest()));
     }
 
+    /**
+     * Получение ID TV параметра из сроки
+     * По факту простая обработка строки регулярным выражением,
+     * удаляется всё кроме цифр
+     *
+     * @param string $value
+     * @return int
+     */
     protected function getTVId($value)
     {
-        return (int) preg_replace('/[^\d]+/', '', $value);
+        return (int) preg_replace('/[^\d]+/', '', (string) $value);
     }
 
     protected function generateSelect()
@@ -535,6 +547,12 @@ class Filter
 
     }
 
+    /**
+     * Установка плейсхолдера с соотв. префиксом, по умолчанию префикс 'ef.'
+     *
+     * @param string $name Имя
+     * @param string $value Значение
+     */
     protected function setPlaceholder($name, $value)
     {
         if ( ! is_scalar($value)) return;
