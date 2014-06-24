@@ -595,4 +595,15 @@ class EvoFilter
         return phpFastCache::get($key);
     }
 
+    /**
+     * Очистка кэша
+     * Возвращает кол-во удаленных файлов
+     *
+     * @return int|null
+     */
+    public function cleanCache()
+    {
+        return phpFastCache::cleanup();
+    }
+
 }
