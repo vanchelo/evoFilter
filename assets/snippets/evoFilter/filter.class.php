@@ -67,7 +67,7 @@ class EvoFilter
         $this->modx =& $modx;
 
         $this->config = array(
-            'form_tpl'       => 'new_filter_form', // Чанк шаблон формы поиска
+            'form_tpl'       => 'evoFiler_form', // Чанк шаблон формы поиска
             'tpl'            => 'DLpost', // Чанк шаблон для DocLister
             'parent'         => 10,
             'only_form'      => false, // Показываем только форму без результатов
@@ -155,7 +155,7 @@ class EvoFilter
 
         foreach ($this->parsedTVs as $tv)
         {
-            $id = "i{$tv['id']}";
+            $id = $this->config['request_prefix'] . $tv['id'];
             $output = '';
             if ($tv['type'] == 'select')
             {
@@ -180,11 +180,13 @@ class EvoFilter
 
         // Категории
         $params['categories'] = '';
-        foreach ($this->getCategories() as $id => $c) {
+        foreach ($this->getCategories() as $id => $c)
+        {
             $params['categories'] .= '<option value="'.$c['alias'].'"'.($this->id == $id ? ' selected' : '').'>'.$c['title'].'</option>';
         }
 
         $params['action'] = $this->modx->makeUrl($this->id);
+        $params['request_prefix'] = $this->config['request_prefix'];
 
         $form = $this->parseChunk($this->config['form_tpl'], $params);
 
