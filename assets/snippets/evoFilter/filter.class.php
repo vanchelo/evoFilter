@@ -15,7 +15,7 @@ class Filter
      */
     protected $modx;
     /**
-     * ID каталога
+     * ID каталога с которого осуществляется поиск
      *
      * @var int
      */
@@ -25,15 +25,35 @@ class Filter
      * @var int
      */
     protected $id;
+    /**
+     * Таблица ресурсов
+     * @var string
+     */
     protected $contentTable;
+    /**
+     * Таблица TV параметров
+     * @var string
+     */
     protected $tvTable;
+    /**
+     * Таблица значений TV параметров ресурсов
+     * @var string
+     */
     protected $tvValuesTable;
     protected $request = array();
     protected $itemsCount = 0;
     protected $filteredItemsCount = 0;
     protected $childs = array();
     protected $chunks = array();
+    /**
+     * Массив TV параметров и их свойств созданный путем обработки шаблона формы
+     * @var array
+     */
     protected $parsedTVs = array();
+    /**
+     * Массив настроек
+     * @var array
+     */
     protected $config = array();
 
     /**
@@ -49,16 +69,18 @@ class Filter
         $this->config = array(
             'form_tpl'  => 'new_filter_form',
             'tpl'       => 'DLpost',
-            'parent'    => 49,
+            'parent'    => 10,
             'only_form' => false,
             'display'   => 14,
+            'prefix'    => 'ef',
         );
 
         if (!empty($config['form_tpl'])) $this->config['form_tpl'] = $config['form_tpl'];
         if (!empty($config['tpl'])) $this->config['tpl'] = $config['tpl'];
-        if (!empty($config['parent'])) $this->config['parent'] = $config['parent'];
+        if (!empty($config['parent'])) $this->config['parent'] = (int) $config['parent'];
         if (!empty($config['only_form'])) $this->config['only_form'] = true;
         if (!empty($config['display'])) $this->config['display'] = (int) $config['display'];
+        if (!empty($config['prefix'])) $this->config['prefix'] = $config['prefix'];
 
         $this->parent = (int) $this->config['parent'];
 
@@ -69,24 +91,25 @@ class Filter
             $this->id = $this->parent;
         }
 
-        $this->config['rules'] = array(
-            'sign'  => array('<','>','='),
-            'types' => array('checkbox','num','select'),
-        );
-
         // Таблицы базы данных
         $this->contentTable = $modx->getFullTableName(self::CONTENT_TABLE);
         $this->tvTable = $modx->getFullTableName(self::TV_TABLE);
         $this->tvValuesTable = $modx->getFullTableName(self::TVVALUES_TABLE);
 
-        // Настройки кэшера
+        // Настройки класса кэширования
         phpFastCache::$storage = 'files';
         phpFastCache::$path = MODX_BASE_PATH . 'assets/cache/';
         phpFastCache::$securityKey = 'custom';
     }
 
     /**
+     * Генерация формы поиска и результатов
+     * Данные помещаются в соответствующие плейсхолдеры
      *
+     * [+prefix.form+]        - Форма поиска
+     * [+prefix.result+]      - Результат работы DocLister
+     * [+prefix.items_count+] - Общее кол-во ресурсов
+     * [+prefix.form+]        - Кол-во найденных (отфильтрованных) ресурсов
      */
     public function process()
     {
@@ -108,18 +131,18 @@ class Filter
                 'TplWrapPaginate' => 'dlwrappag',
             ));
 
-            $this->modx->setPlaceholder('af.result', $result);
-            $this->modx->setPlaceholder('af.items_count', $this->itemsCount);
-            $this->modx->setPlaceholder('af.items_show_count', $this->filteredItemsCount);
+            $this->setPlaceholder('result', $result);
+            $this->setPlaceholder('items_count', $this->itemsCount);
+            $this->setPlaceholder('items_show_count', $this->filteredItemsCount);
         }
 
-        $this->modx->setPlaceholder('af.form', $this->getForm());
+        $this->setPlaceholder('form', $this->getForm());
     }
 
     /**
      * Генерация формы поиска
      *
-     * @return mixed
+     * @return string
      */
     protected function getForm()
     {
@@ -167,7 +190,42 @@ class Filter
     }
 
     /**
-     * @param $text
+     * Генерация массив TV параметров и их свойств
+     * Все обработанные TV будут доступны для поиска
+     *
+     * -------------------------------------------------------------------------
+     * Пример записи TV параметра в шаблоне формы
+     * -------------------------------------------------------------------------
+     *
+     * Поиск по TV с ID 1 и генерирация списка возможных значений:
+     * [+tv:{"id":1,"type":"select"}+]
+     *
+     * Пример:
+     *
+         <select name="prefix1" class="styled">
+            <option value="">Выберите значение</option>
+            [+tv:{"id":1,"type":"select"}+]
+         </select>
+     * -------------------------------------------------------------------------
+     *
+     * Поиск по TV с ID 2, отмечает флажок, если он указан в запросе:
+     * [+tv:{"id":2,"type":"checkbox"}+]
+     *
+     * Пример:
+
+         <input type="checkbox" name="prefix2" value="checked" [+tv:{"id":2,"type":"checkbox"}+]>
+     * -------------------------------------------------------------------------
+     *
+     * В данном случае поиск осуществляется по числу (цене) меньше указанной
+     * В поле value будет подставлено соотв. значение из запроса
+     * [+tv:{"id":3,"type":"num","sign":"<"}+]
+     *
+     * Доступны след. знаки: < = > (меньше, равно, больше)
+     *
+     * Пример:
+     * <input type="text" name="prefix8" value="[+tv:{"id":3,"type":"num","sign":"<"}+]">
+     *
+     * @param string $text
      * @return array
      */
     protected function parseTVs($text = null)
@@ -195,9 +253,9 @@ class Filter
     }
 
     /**
-     * @param $name
+     * @param string $name
      * @param array $params
-     * @return mixed
+     * @return string
      */
     protected function parseChunk($name, $params = array(), $start = '[+', $end = '+]')
     {
@@ -210,8 +268,8 @@ class Filter
     }
 
     /**
-     * @param $name
-     * @return mixed
+     * @param string $name
+     * @return string
      */
     protected function getChunk($name)
     {
@@ -226,7 +284,7 @@ class Filter
     }
 
     /**
-     * @param $string
+     * @param string $string
      * @param array $params
      * @return mixed
      */
@@ -245,9 +303,9 @@ class Filter
     /**
      * Получение списка элементов на основе значиний ТВ ресурсов
      *
-     * @param $tvId
-     * @param null $ids
-     * @return array|mixed|null
+     * @param int $tvId ID TV параметра по которому будет сгенерирован список
+     * @param array|string $ids Список ID ресурсов для ограничение выборки
+     * @return array
      */
     protected function getListFromTvValues($tvId, $ids = null)
     {
@@ -475,6 +533,13 @@ class Filter
     protected function generateCheckbox()
     {
 
+    }
+
+    protected function setPlaceholder($name, $value)
+    {
+        if ( ! is_scalar($value)) return;
+
+        $this->modx->setPlaceholder($this->config['prefix'].'.'.$name, $value);
     }
 
     /**
