@@ -125,11 +125,10 @@ class Filter
     {
         $request = $this->getRequest();
         $params = array();
-        $tvs = $this->parseTVs();
 
         $childs = implode(',', $this->getCategoryChildIds());
 
-        foreach ($tvs as $tv)
+        foreach ($this->parsedTVs as $tv)
         {
             $id = "i{$tv['id']}";
             $output = '';
@@ -441,7 +440,7 @@ class Filter
             $value = $this->modx->db->escape((string) $value);
 
             // Проверяем разрешен ли поиск по этому TV
-            if (empty($value)) continue;
+            if ( ! isset($this->parsedTVs[$tv]) || empty($value)) continue;
 
             $this->request[$prefix . $tv] = $value;
         }
@@ -461,12 +460,6 @@ class Filter
     protected function getTVId($value)
     {
         return (int) preg_replace('/[^\d]+/', '', $value);
-    }
-
-    protected function setCountPlaceholders()
-    {
-        $this->modx->setPlaceholder('af.items_count', $this->itemsCount);
-        $this->modx->setPlaceholder('af.items_show_count', $this->filteredItemsCount);
     }
 
     protected function generateSelect()
