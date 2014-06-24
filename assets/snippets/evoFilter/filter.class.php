@@ -170,7 +170,11 @@ class EvoFilter
             {
                 $output = !empty($request->{$id}) ? 'checked' : '';
             }
-            elseif ($tv['type'] == 'num' && (int) $request->{$id})
+            elseif ($tv['type'] == 'string' && !empty($request->{$id}))
+            {
+                $output = e($request->{$id});
+            }
+            elseif (($tv['type'] == 'num' || $tv['type'] == 'price') && (int) $request->{$id})
             {
                 $output = (int) $request->{$id};
             }
@@ -451,11 +455,13 @@ class EvoFilter
                     $sql .= "(tmplvarid = {$tv} and value != '')";
                     break;
                 case 'num':
+                case 'price':
                     if ( ! isset($tvs[$tv]['sign'])) $tvs[$tv]['sign'] = '<';
                     $sign = preg_match('/^[<|=|>]$/', $tvs[$tv]['sign']);
                     $sql .= "(tmplvarid = {$tv} and value " . ($sign ? $tvs[$tv]['sign'] : '<') . " ".intval($value).")";
                     break;
                 case 'select':
+                case 'string':
                     $sql .= "(tmplvarid = {$tv} and value = '{$value}')";
                     break;
             }
