@@ -108,10 +108,10 @@ class EvoFilter
      * Генерация формы поиска и результатов
      * Данные помещаются в соответствующие плейсхолдеры
      *
-     * [+prefix.form+]        : Форма поиска
-     * [+prefix.result+]      : Результат работы DocLister
-     * [+prefix.items_count+] : Общее кол-во ресурсов
-     * [+prefix.form+]        : Кол-во найденных (отфильтрованных) ресурсов
+     * [+prefix.form+]             : Форма поиска
+     * [+prefix.result+]           : Результат работы DocLister
+     * [+prefix.items_count+]      : Общее кол-во ресурсов
+     * [+prefix.items_show_count+] : Кол-во найденных (отфильтрованных) ресурсов
      */
     public function process()
     {
@@ -125,7 +125,7 @@ class EvoFilter
                 'documents'       => $this->getFilteredResourceIds(),
                 'tpl'             => $this->config['tpl'],
                 'paginate'        => 'pages',
-                'tvList'          => 'image-cat,kind,komnat,price,price_ed',
+                'tvList'          => $this->config['tvList'],
                 'TplNextP'        => 'dlnext',
                 'TplPrevP'        => 'dlprev',
                 'TplPage'         => 'dlpage',
