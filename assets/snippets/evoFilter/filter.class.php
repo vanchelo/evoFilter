@@ -74,6 +74,7 @@ class EvoFilter
             'display'        => 14, // Кол-во результатов на странице
             'prefix'         => 'ef', // Префикс для TV параметров
             'request_prefix' => 'ef', // Префикс для TV параметров в запросе
+            'tvList'         => '', // Список ТВ параметров для DocLister
         );
 
         if (!empty($config['form_tpl'])) $this->config['form_tpl'] = $config['form_tpl'];
@@ -83,6 +84,7 @@ class EvoFilter
         if (!empty($config['display'])) $this->config['display'] = (int) $config['display'];
         if (!empty($config['prefix'])) $this->config['prefix'] = $config['prefix'];
         if (!empty($config['request_prefix'])) $this->config['request_prefix'] = $config['request_prefix'];
+        if (!empty($config['tvList'])) $this->config['tvList'] = $config['tvList'];
 
         $this->parent = (int) $this->config['parent'];
 
