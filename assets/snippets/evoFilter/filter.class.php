@@ -153,32 +153,40 @@ class EvoFilter
         $request = $this->getRequest();
         $params = array();
 
-        $childs = implode(',', $this->getCategoryChildIds());
-
-        foreach ($this->parsedTVs as $tv)
+        foreach ($this->parsedTVs as $id => $tv)
         {
-            $id = $this->config['request_prefix'] . $tv['id'];
+            $id = $this->config['request_prefix'] . $id;
+
+            if (is_array($request->{$id}))
+            {
+                foreach ($tv as $k => $v)
+                {
+                    if (isset($request->{$id}[$k]))
+                    {
+                        $params["tv:{$v['key']}"] = !empty($request->{$id}[$k]) ? e($request->{$id}[$k]) : '';
+                    }
+                }
+
+                continue;
+            }
+
             $output = '';
+
             if ($tv['type'] == 'select')
             {
-                if ($tv['delimeter']) $list = $this->getListFromTv($tv['id'], $tv['delimeter']);
-                else $list = $this->getListFromTvValues($tv['id'], $childs);
-
-                foreach ($list as $k => $l) {
-                    $output .= '<option value="'.$l.'"' . ($request->{$id} == $l ? ' selected' : '') . '>'.$l.'</option>';
-                }
+                $output = $this->generateSelect($tv, $request->{$id});
             }
             elseif ($tv['type'] == 'checkbox')
             {
-                $output = !empty($request->{$id}) ? 'checked' : '';
+                $output = $this->generateCheckbox($tv, $request->{$id});
             }
-            elseif ($tv['type'] == 'string' && !empty($request->{$id}))
+            elseif ($tv['type'] == 'string')
             {
-                $output = e($request->{$id});
+                $output = !empty($request->{$id}) ? e($request->{$id}) : '';
             }
-            elseif (($tv['type'] == 'num' || $tv['type'] == 'price') && (int) $request->{$id})
+            elseif ($tv['type'] == 'num')
             {
-                $output = (int) $request->{$id};
+                $output = (int) $request->{$id} ? (int) $request->{$id} : '';
             }
 
             $params["tv:{$tv['key']}"] = $output;
@@ -186,8 +194,7 @@ class EvoFilter
 
         // Категории
         $params['categories'] = '';
-        foreach ($this->getCategories() as $id => $c)
-        {
+        foreach ($this->getCategories() as $id => $c) {
             $params['categories'] .= '<option value="'.$c['alias'].'"'.($this->id == $id ? ' selected' : '').'>'.$c['title'].'</option>';
         }
 
@@ -250,13 +257,23 @@ class EvoFilter
         $matches = array();
 
         preg_match_all('/\[\+tv:(.*)\+\]/ui', $text, $matches);
-        foreach ($matches[1] as $tv) {
+        foreach ($matches[1] as $tv)
+        {
             $value = json_decode($tv, true);
             if ( ! $value) continue;
 
             $value['key'] = $tv;
 
-            $this->parsedTVs[$value['id']] = $value;
+            // Обработка фильтрации по цене "ОТ" и "ДО"
+            if ($value['type'] === 'price' && isset($value['order']))
+            {
+                $this->parsedTVs[$value['id']][$value['order']] = $value;
+            }
+            // Все остальные
+            else
+            {
+                $this->parsedTVs[$value['id']] = $value;
+            }
         }
 
         return $this->parsedTVs;
@@ -425,6 +442,8 @@ class EvoFilter
         }
 
         $this->itemsCount = count($this->childs);
+        // ID категорий
+        $this->setPlaceholder('categories', implode(',', $this->childs));
 
         return $this->childs;
     }
@@ -449,19 +468,49 @@ class EvoFilter
         $i = 0;
         foreach ($request->getProperties() as $tv => $value)
         {
-            $tv = $this->getTVId($tv);
+            $tv = $this->stringToInt($tv);
             $sql .= $i ? ' or ' : ' and ';
 
+            // Выборка по цене - ОТ и ДО
+            if (is_array($value) && is_array($tvs[$tv]))
+            {
+                if (isset($tvs[$tv]['from']) && isset($tvs[$tv]['to']) && $value['from'] && $value['to'])
+                {
+                    // Если цена "ОТ" больше или равна цены "ДО"
+                    if ($value['from'] >= $value['to'])
+                    {
+                        $value['from'] = 0;
+                    }
+
+                    $sql .= "(tmplvarid = {$tv} and value BETWEEN {$value['from']} and {$value['to']})";
+                }
+                // Если указана только цена "ОТ"
+                elseif (isset($tvs[$tv]['from']) && $value['from'])
+                {
+                    $sql .= "(tmplvarid = {$tv} and value > {$value['from']})";
+                }
+                // Если указана только цена "ДО"
+                elseif (isset($tvs[$tv]['to']) && $value['to'])
+                {
+                    $sql .= "(tmplvarid = {$tv} and value < {$value['to']})";
+                }
+
+                continue;
+            }
+
+            // Выборка по другим типам ТВ
             switch ($tvs[$tv]['type']) {
+                // Флильтрация по чекбоксу
                 case 'checkbox':
                     $sql .= "(tmplvarid = {$tv} and value != '')";
                     break;
+                // Фильтр по числу
                 case 'num':
-                case 'price':
                     if ( ! isset($tvs[$tv]['sign'])) $tvs[$tv]['sign'] = '<';
                     $sign = preg_match('/^[<|=|>]$/', $tvs[$tv]['sign']);
                     $sql .= "(tmplvarid = {$tv} and value " . ($sign ? $tvs[$tv]['sign'] : '<') . " ".intval($value).")";
                     break;
+                // Фильтрация по выбранному значению из списка или введенному значению
                 case 'select':
                 case 'string':
                     $sql .= "(tmplvarid = {$tv} and value = '{$value}')";
@@ -486,6 +535,8 @@ class EvoFilter
         }
 
         $this->filteredItemsCount = count($ids);
+        // ID найденный документов
+        $this->setPlaceholder('ids', implode(',', $ids));
 
         return $ids;
     }
@@ -504,17 +555,18 @@ class EvoFilter
 
         if ($prefix === null) $prefix = $this->config['request_prefix'];
 
-        // Обходим массив запроса
+        // Обходим массив с запросом
         foreach ($request as $tv => $value)
         {
             if (strpos($tv, $prefix) !== 0) continue;
 
             // ID TV параметра
-            $tv = $this->getTVId($tv);
-            $value = $this->modx->db->escape((string) $value);
-
+            $tv = $this->stringToInt($tv);
             // Проверяем разрешен ли поиск по этому TV
-            if ( ! isset($this->parsedTVs[$tv]) || empty($value)) continue;
+            if ( ! isset($this->parsedTVs[$tv])) continue;
+
+            $this->escapeTVValue($value, $this->parsedTVs[$tv]);
+            if (empty($value)) continue;
 
             $this->request[$prefix . $tv] = $value;
         }
@@ -532,21 +584,44 @@ class EvoFilter
     }
 
     /**
-     * Получение ID TV параметра из сроки
+     * Получение ID TV параметра из строки
      * По факту простая обработка строки регулярным выражением,
      * удаляется всё кроме цифр
      *
      * @param string $value
      * @return int
      */
-    protected function getTVId($value)
+    protected function stringToInt($value)
     {
         return (int) preg_replace('/[^\d]+/', '', (string) $value);
     }
 
-    protected function generateSelect()
+    /**
+     * Генерация элементов выпадающего списка
+     *
+     * @param array $tv
+     * @param string $value
+     * @return string
+     */
+    protected function generateSelect(array $tv, $value = '')
     {
+        if (!empty($tv['delimeter']))
+        {
+            $list = $this->getListFromTv($tv['id'], $tv['delimeter']);
+        }
+        else
+        {
+            $childs = implode(',', $this->getCategoryChildIds());
+            $list = $this->getListFromTvValues($tv['id'], $childs);
+        }
 
+        $output = '';
+        foreach ($list as $k => $v)
+        {
+            $output .= '<option value="'.$v.'"' . ($value == $v ? ' selected' : '') . '>'.$v.'</option>';
+        }
+
+        return $output;
     }
 
     protected function generateNum()
@@ -554,9 +629,42 @@ class EvoFilter
 
     }
 
-    protected function generateCheckbox()
+    protected function generateCheckbox(array $tv, $value = '')
+    {
+        return !empty($value) ? 'checked' : '';
+    }
+
+    protected function generateString(array $tv, $value = '')
     {
 
+    }
+
+    protected function generatePrice(array $tv, $value = '')
+    {
+
+    }
+
+    protected function escapeTVValue( & $value, $tv)
+    {
+        if ( ! is_array($value))
+        {
+            $this->escape($value);
+        }
+        else
+        {
+            foreach ($value as $k => & $v)
+            {
+                if (isset($tv['from']) || isset($tv['to'])) $v = (int) $v;
+                if (empty($v)) unset($value[$k]);
+                else $this->escape($v);
+            }
+        }
+    }
+
+    protected function escape(& $value)
+    {
+        if (is_numeric($value)) $value = (int) $value;
+        else $value = $this->modx->db->escape((string) $value);
     }
 
     /**
@@ -577,11 +685,11 @@ class EvoFilter
      *
      * @param $key
      * @param $value
-     * @param int $seconds
+     * @param int $seconds По умолчанию 12 часов
      * @param bool $skip_if_existing
      * @return array|bool
      */
-    protected function put($key, $value, $seconds = 3600, $skip_if_existing = false)
+    protected function put($key, $value, $seconds = 43200, $skip_if_existing = false)
     {
         return phpFastCache::set($key, $value, $seconds, $skip_if_existing);
     }
