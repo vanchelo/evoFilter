@@ -1,4 +1,6 @@
 <?php
+
+/** @var DocumentParser $modx */
 defined('MODX_BASE_PATH') or die;
 
 require MODX_BASE_PATH . 'assets/snippets/evoFilter/filter.class.php';
